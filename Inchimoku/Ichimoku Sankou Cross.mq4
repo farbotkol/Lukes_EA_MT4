@@ -163,31 +163,27 @@ int start()
    double KijunPrev    = iIchimoku(s_symbol,0,Tenkan,Kijun,52,MODE_KIJUNSEN,1);
    double SenkouSpanA  = iIchimoku(s_symbol,0,Tenkan,Kijun,52,MODE_SENKOUSPANA,0);
    double SenkouSpanB  = iIchimoku(s_symbol,0,Tenkan,Kijun,52,MODE_SENKOUSPANB,0);
+   double SenkouSpanAPrev  = iIchimoku(s_symbol,0,Tenkan,Kijun,52,MODE_SENKOUSPANA,1);
+   double SenkouSpanBPrev  = iIchimoku(s_symbol,0,Tenkan,Kijun,52,MODE_SENKOUSPANB,1);
    double ChikouSpan  = iIchimoku(s_symbol,0,Tenkan,Kijun,52,MODE_CHIKOUSPAN,26);
    double Close26Back = iClose(s_symbol,0,26);
    
    
    //Print("ChikouSpan: " + ChikouSpan);
-   if (!ExistPositions())
-   {
-      
-      //THESE LOOK WRONG , USE iIchimoku INSTEAD 
-      double diCustom0 = iCustom(s_symbol,TenkanKijunTf,"Tenkan Sen-Kijun Sen",0,Tenkan,Kijun,0,bar);
-      double diCustom1 = iCustom(s_symbol,TenkanKijunTf,"Tenkan Sen-Kijun Sen",0,Tenkan,Kijun,1,bar);
-      double diCustom2 = iCustom(s_symbol,TenkanKijunTf,"Tenkan Sen-Kijun Sen",0,Tenkan,Kijun,1,bar);
-      double diCustom3 = iCustom(s_symbol,TenkanKijunTf,"Tenkan Sen-Kijun Sen",0,Tenkan,Kijun,1,bar+1);
-      
-      double diMA3     = iMA(s_symbol,MaTimeframe,MaPeriod,0,MaType,PRICE_CLOSE,bar);
-      double diMA4     = iMA(s_symbol,MaTimeframe,MaPeriod,0,MaType,PRICE_CLOSE,bar+1);
-      
+
+      //THESE LOOK WRONG , USE iIchimoku INSTEAD     
       // dilute signals
       lastWeakBuySignal--;
       lastWeakSellSignal--;
       //printf("tk = " + TenkanCurrent + "," + TenkanPrev + ","  + KijunCurrent + "," + KijunPrev + "," );
       
       // STRONG Tenkan Sen/Kijun Sen Cross strategy Buy -- BUY NOW
-      if (TenkanCurrent > KijunCurrent && TenkanPrev < KijunPrev && (TenkanCurrent >  SenkouSpanA && TenkanCurrent > SenkouSpanB) && Close26Back < ChikouSpan && Bid < 1.04 && lastWeakSellSignal <=0)
+      if (SenkouSpanA > SenkouSpanB && SenkouSpanAPrev < SenkouSpanBPrev /*&& Close26Back < ChikouSpan && lastWeakSellSignal <=0*/)
       {
+         if (ExistPositions())
+         {
+            Close();
+         }
          OpenBuy();
          lastWeakBuySignal = 0;
          lastWeakSellSignal = 0;
@@ -195,8 +191,12 @@ int start()
       }
       
       // STRONG Tenkan Sen/Kijun Sen Cross strategy sell -- sell NOW
-      if (TenkanCurrent < KijunCurrent && TenkanPrev > KijunPrev && (TenkanCurrent <  SenkouSpanA && TenkanCurrent < SenkouSpanB )&& Close26Back > ChikouSpan && Ask > .95 && lastWeakBuySignal <=0)
+      if (SenkouSpanA < SenkouSpanB && SenkouSpanAPrev > SenkouSpanBPrev /*&& Close26Back > ChikouSpan  && lastWeakBuySignal <=0*/)
       {
+         if (ExistPositions())
+         {
+            Close();
+         }
          OpenSell();
          lastWeakBuySignal = 0;
          lastWeakSellSignal = 0;
@@ -217,35 +217,8 @@ int start()
       }
  
      
-      // THESE IF STATEMENTS ARE ALSO WRONG 
-      /*if (diCustom0 > diCustom1 && diCustom2 > diMA3 && diCustom3 <= diMA4)
-      {
-         OpenBuy();
-         return(0);
-      }
 
-      if (diCustom0 < diCustom1 && diCustom2 < diMA3 && diCustom3 >= diMA4)
-      {
-         //Print("diCustom0:" +diCustom0);
-         //Print("diCustom1:" +diCustom1);
-         //Print("diCustom2:" +diCustom2);
-         //Print("diCustom3:" +diCustom3);
-         //Print("diMA3:" +diMA3);
-         //Print("diMA4:" +diMA);
-         OpenSell();
-         return(0);
-      }*/
-
-  }
-  else{
-      //sentament has changed so close out
-      if (CloseOrderOnSentimentChange(TenkanCurrent , KijunCurrent , TenkanPrev , KijunPrev, SenkouSpanA,SenkouSpanB ) )
-      {
-     
-         return(0);
-      }
-
-  }
+  
   if(lTrailingStop > 0)  TrailingPositionsBuy(KijunCurrent);
   if(sTrailingStop > 0)  TrailingPositionsSell(KijunCurrent);
   return (0);
@@ -274,15 +247,15 @@ return(false);
 //
 //
 //CLOSE IF cross SENTIMENT HAS CHANGE AND SenkouSpan has as well
-bool CloseOrderOnSentimentChange(double TenkanCurrent, double  KijunCurrent , double  TenkanPrev , double  KijunPrev, double SenkouSpanA, double SenkouSpanB) { 
+bool Close() { 
    for (int i = 0; i < OrdersTotal(); i++) { 
       if (OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) { 
          if (OrderSymbol() == s_symbol && OrderMagicNumber() == MAGIC) { 
-            if (OrderType() == OP_BUY && ((TenkanCurrent < KijunCurrent && TenkanPrev > KijunPrev) || TenkanPrev == KijunPrev) && SenkouSpanA < SenkouSpanB) { 
+            if (OrderType() == OP_BUY) { 
               OrderClose(OrderTicket(), OrderLots(), Bid, 3, Violet);
               return true;
             }
-            if (OrderType() == OP_SELL && ((TenkanCurrent > KijunCurrent && TenkanPrev < KijunPrev) || TenkanCurrent == KijunCurrent ) &&  SenkouSpanB < SenkouSpanA){ 
+            if (OrderType() == OP_SELL ){ 
               OrderClose(OrderTicket(), OrderLots(), Ask, 3, Violet);
               return true;
             }  

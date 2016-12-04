@@ -26,8 +26,8 @@ extern double lStopLoss         = 100;
 extern double sStopLoss         = 100;
 extern double lTakeProfit       = 300;
 extern double sTakeProfit       = 300;
-extern double lTrailingStop     = 40;
-extern double sTrailingStop     = 40;
+extern double lTrailingStop     = 60;
+extern double sTrailingStop     = 60;
 extern int    Slippage          = 4;
 extern double Lots              = 0.1;
 extern double MaximumRisk       = 0;
@@ -72,8 +72,11 @@ int    digit;
 
 double currentClosePrice = 0;
 
-int lastWeakSellSignal = 0;
-int lastWeakBuySignal = 0;
+
+int TenkanKijunSignal = 0; 
+int SenkouCrossSignal = 0;
+int KijunCrossSignal = 0;
+int CurrentDirection = 0;
 
 //
 //
@@ -112,7 +115,16 @@ int deinit() { return(0); }
 
 int start()
 {
-        
+   // reset indicaturs as there is no position and we still think we have a direction
+   if (!ExistPositions() && CurrentDirection != 0)
+   {
+      CurrentDirection = 0;
+      //SenkouCrossSignal = 0;
+      KijunCrossSignal = 0;
+      TenkanKijunSignal =0;
+   }
+            
+
 
    if(Bars < 100) { Print("bars less than 100"); return(0); }
    
@@ -163,92 +175,108 @@ int start()
    double KijunPrev    = iIchimoku(s_symbol,0,Tenkan,Kijun,52,MODE_KIJUNSEN,1);
    double SenkouSpanA  = iIchimoku(s_symbol,0,Tenkan,Kijun,52,MODE_SENKOUSPANA,0);
    double SenkouSpanB  = iIchimoku(s_symbol,0,Tenkan,Kijun,52,MODE_SENKOUSPANB,0);
+   double SenkouSpanAPrev  = iIchimoku(s_symbol,0,Tenkan,Kijun,52,MODE_SENKOUSPANA,1);
+   double SenkouSpanBPrev  = iIchimoku(s_symbol,0,Tenkan,Kijun,52,MODE_SENKOUSPANB,1);
    double ChikouSpan  = iIchimoku(s_symbol,0,Tenkan,Kijun,52,MODE_CHIKOUSPAN,26);
    double Close26Back = iClose(s_symbol,0,26);
+   double CloseCurrent = Close[0];//]iClose(s_symbol,0,0);
+   double OpenCurrent = Open[0];//iOpen(s_symbol,0,0);
    
-   
-   //Print("ChikouSpan: " + ChikouSpan);
-   if (!ExistPositions())
+   string cname="ctx"+TimeToStr(Time[0],TIME_DATE|TIME_MINUTES|TIME_SECONDS);
+   if (SenkouSpanA > SenkouSpanB && SenkouSpanAPrev < SenkouSpanBPrev  )
    {
-      
-      //THESE LOOK WRONG , USE iIchimoku INSTEAD 
-      double diCustom0 = iCustom(s_symbol,TenkanKijunTf,"Tenkan Sen-Kijun Sen",0,Tenkan,Kijun,0,bar);
-      double diCustom1 = iCustom(s_symbol,TenkanKijunTf,"Tenkan Sen-Kijun Sen",0,Tenkan,Kijun,1,bar);
-      double diCustom2 = iCustom(s_symbol,TenkanKijunTf,"Tenkan Sen-Kijun Sen",0,Tenkan,Kijun,1,bar);
-      double diCustom3 = iCustom(s_symbol,TenkanKijunTf,"Tenkan Sen-Kijun Sen",0,Tenkan,Kijun,1,bar+1);
-      
-      double diMA3     = iMA(s_symbol,MaTimeframe,MaPeriod,0,MaType,PRICE_CLOSE,bar);
-      double diMA4     = iMA(s_symbol,MaTimeframe,MaPeriod,0,MaType,PRICE_CLOSE,bar+1);
-      
-      // dilute signals
-      lastWeakBuySignal--;
-      lastWeakSellSignal--;
-      //printf("tk = " + TenkanCurrent + "," + TenkanPrev + ","  + KijunCurrent + "," + KijunPrev + "," );
-      
-      // STRONG Tenkan Sen/Kijun Sen Cross strategy Buy -- BUY NOW
-      if (TenkanCurrent > KijunCurrent && TenkanPrev < KijunPrev && (TenkanCurrent >  SenkouSpanA && TenkanCurrent > SenkouSpanB) && Close26Back < ChikouSpan && Bid < 1.04 && lastWeakSellSignal <=0)
-      {
+      SenkouCrossSignal = 1;
+   }
+   if (SenkouSpanA < SenkouSpanB && SenkouSpanAPrev > SenkouSpanBPrev )
+   {
+      SenkouCrossSignal = -1;
+   }
+   //Print("SenkouCrossSignal :" + SenkouCrossSignal);
+   if (TenkanCurrent > KijunCurrent  &&  TenkanPrev < KijunPrev)
+   {
+      TenkanKijunSignal = 1;
+   }
+   if (TenkanCurrent < KijunCurrent  &&  TenkanPrev > KijunPrev)
+   {
+      TenkanKijunSignal = -1;
+   }
+   //Print("TenkanKijunSignal :" + TenkanKijunSignal);
+   if (CloseCurrent > OpenCurrent && CloseCurrent > KijunCurrent && OpenCurrent < KijunCurrent )
+   {
+      KijunCrossSignal = 1;
+      ObjectCreate (cname,OBJ_ARROW,0,TimeCurrent(),CloseCurrent);
+      ObjectSet (cname,OBJPROP_COLOR,Yellow);
+      ObjectSet(cname,OBJPROP_ARROWCODE,241);
+
+   }
+   if (CloseCurrent < OpenCurrent && CloseCurrent < KijunCurrent && OpenCurrent > KijunCurrent )
+   {
+      KijunCrossSignal = -1;
+      ObjectCreate (cname,OBJ_ARROW,0,TimeCurrent(),CloseCurrent);
+      ObjectSet (cname,OBJPROP_COLOR,Orange);
+      ObjectSet(cname,OBJPROP_ARROWCODE,242);
+   } 
+   /*Print("high :" + High[0]); 
+   Print("low :" + Low[0]); 
+   Print("CloseCurrent :" + Close[0]); 
+   Print("OpenCurrent :" + Open[0]); 
+   Print("KijunCrossSignal :" + KijunCrossSignal);   
+   
+   Print("------------------------------------------ :");
+   */
+    int signalStrength = SenkouCrossSignal + KijunCrossSignal + TenkanKijunSignal;
+    
+    //Print("signalStrength :" + signalStrength);
+    if (!ExistPositions())
+    {
+       
+       if (signalStrength == 3 && Close26Back < ChikouSpan)
+       {
+         CurrentDirection = 1;
          OpenBuy();
-         lastWeakBuySignal = 0;
-         lastWeakSellSignal = 0;
+         //SenkouCrossSignal = 0;
+         KijunCrossSignal = 0;
+         TenkanKijunSignal =0;
          return(0);
-      }
-      
-      // STRONG Tenkan Sen/Kijun Sen Cross strategy sell -- sell NOW
-      if (TenkanCurrent < KijunCurrent && TenkanPrev > KijunPrev && (TenkanCurrent <  SenkouSpanA && TenkanCurrent < SenkouSpanB )&& Close26Back > ChikouSpan && Ask > .95 && lastWeakBuySignal <=0)
-      {
+       }
+       if (signalStrength == -3 && Close26Back > ChikouSpan)
+       {
+         CurrentDirection = -1;
          OpenSell();
-         lastWeakBuySignal = 0;
-         lastWeakSellSignal = 0;
+         //SenkouCrossSignal = 0;
+         KijunCrossSignal = 0;
+         TenkanKijunSignal =0;
          return(0);
-      }
+       }
       
-      //Look for weak signals
-      //weak buy
-      if (TenkanCurrent > KijunCurrent && TenkanPrev < KijunPrev)
-      {
-         lastWeakBuySignal = 5;
-         
-      }
       
-      if (TenkanCurrent < KijunCurrent && TenkanPrev > KijunPrev )
-      {
-          lastWeakSellSignal = 5;
-      }
+    }
+    else 
+    {
+      Print("check for early close : " + signalStrength + " : " + CurrentDirection);
+      Print("SenkouSpanB Ask  : " + CloseCurrent + " : " + Ask);
+       if ( (signalStrength == -3   || Bid <KijunCurrent) &&  CurrentDirection ==1)
+       {
+         Print("Close buy early");
+         Close();
+         return(0);
+       }
+       if ( (SenkouCrossSignal == 3  || Ask > KijunCurrent) &&  CurrentDirection == -1)
+       {
+         Print("Close sell early");
+         Close();
+         return(0);
+       }
+    }
+      
+   
  
      
-      // THESE IF STATEMENTS ARE ALSO WRONG 
-      /*if (diCustom0 > diCustom1 && diCustom2 > diMA3 && diCustom3 <= diMA4)
-      {
-         OpenBuy();
-         return(0);
-      }
-
-      if (diCustom0 < diCustom1 && diCustom2 < diMA3 && diCustom3 >= diMA4)
-      {
-         //Print("diCustom0:" +diCustom0);
-         //Print("diCustom1:" +diCustom1);
-         //Print("diCustom2:" +diCustom2);
-         //Print("diCustom3:" +diCustom3);
-         //Print("diMA3:" +diMA3);
-         //Print("diMA4:" +diMA);
-         OpenSell();
-         return(0);
-      }*/
-
-  }
-  else{
-      //sentament has changed so close out
-      if (CloseOrderOnSentimentChange(TenkanCurrent , KijunCurrent , TenkanPrev , KijunPrev, SenkouSpanA,SenkouSpanB ) )
-      {
+ 
      
-         return(0);
-      }
-
-  }
-  if(lTrailingStop > 0)  TrailingPositionsBuy(KijunCurrent);
-  if(sTrailingStop > 0)  TrailingPositionsSell(KijunCurrent);
-  return (0);
+     if(lTrailingStop > 0)  TrailingPositionsBuy(KijunCurrent);
+     if(sTrailingStop > 0)  TrailingPositionsSell(KijunCurrent);
+     return (0);
 }
 
 //
@@ -265,7 +293,7 @@ bool ExistPositions() {
 			}
 		} 
 	} 
-return(false);
+   return(false);
 }
 
 //
@@ -274,16 +302,22 @@ return(false);
 //
 //
 //CLOSE IF cross SENTIMENT HAS CHANGE AND SenkouSpan has as well
-bool CloseOrderOnSentimentChange(double TenkanCurrent, double  KijunCurrent , double  TenkanPrev , double  KijunPrev, double SenkouSpanA, double SenkouSpanB) { 
+bool Close() { 
    for (int i = 0; i < OrdersTotal(); i++) { 
       if (OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) { 
          if (OrderSymbol() == s_symbol && OrderMagicNumber() == MAGIC) { 
-            if (OrderType() == OP_BUY && ((TenkanCurrent < KijunCurrent && TenkanPrev > KijunPrev) || TenkanPrev == KijunPrev) && SenkouSpanA < SenkouSpanB) { 
+            if (OrderType() == OP_BUY) { 
               OrderClose(OrderTicket(), OrderLots(), Bid, 3, Violet);
+               //SenkouCrossSignal = 0;
+               KijunCrossSignal = 0;
+               TenkanKijunSignal =0;
               return true;
             }
-            if (OrderType() == OP_SELL && ((TenkanCurrent > KijunCurrent && TenkanPrev < KijunPrev) || TenkanCurrent == KijunCurrent ) &&  SenkouSpanB < SenkouSpanA){ 
+            if (OrderType() == OP_SELL ){ 
               OrderClose(OrderTicket(), OrderLots(), Ask, 3, Violet);
+               //SenkouCrossSignal = 0;
+               KijunCrossSignal = 0;
+               TenkanKijunSignal =0;
               return true;
             }  
          } 
@@ -301,7 +335,7 @@ void TrailingPositionsBuy(double KijunCurrent) {
                   ModifyStopLoss (KijunCurrent);
                
                }*/
-               if (Bid-OrderOpenPrice()  - Bid   > lTrailingStop * Point * pipMultiplier) { 
+               if (Bid-OrderOpenPrice()   > lTrailingStop * Point * pipMultiplier) { 
                   //Print("Bid-OrderOpenPrice():" + Bid-OrderOpenPrice() );
                   Print("lTrailingStop * Point * pipMultiplier:" + (lTrailingStop * Point * pipMultiplier) );
                   if (OrderStopLoss() < Bid - lTrailingStop * Point * pipMultiplier) {
@@ -379,7 +413,10 @@ void OpenBuy()
    if (lTakeProfit > 0) double lbTake = Ask + lTakeProfit * Point * pipMultiplier;
    else lbTake = 0;
    
-   if (AccountFreeMargin() < (100 * Lots)) { Print("We have no money. Free Margin = ", AccountFreeMargin()); return(0); }
+   if (AccountFreeMargin() < (100 * Lots)) { 
+     // Print("We have no money. Free Margin = ", AccountFreeMargin()); 
+      return(0); 
+   }
    
    
    if (!EcnBroker) 
@@ -421,7 +458,10 @@ void OpenSell()
    if (sTakeProfit > 0) double lsTake = Bid - sTakeProfit * Point * pipMultiplier;
    else lsTake = 0;
   
-   if (AccountFreeMargin() < (100 * Lots)) { Print("We have no money. Free Margin = ", AccountFreeMargin()); return(0); }
+   if (AccountFreeMargin() < (100 * Lots)) { 
+      //Print("We have no money. Free Margin = ", AccountFreeMargin()); 
+      return(0); 
+   }
    
    
    if (!EcnBroker)
